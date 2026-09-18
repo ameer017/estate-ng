@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: estateng
+      POSTGRES_PASSWORD: estateng
+      POSTGRES_DB: estateng
+    ports:
+      - "5434:5432"
+    volumes:
+      - estateng_pg:/var/lib/postgresql/data
+
+volumes:
+  estateng_pg:

@@ -1,0 +1,243 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TENANT
+  AGENT
+  OWNER
+  ADMIN
+}
+
+enum ListingKind {
+  RENT
+  SALE
+  LAND
+}
+
+enum PropertyType {
+  FLAT
+  DUPLEX
+  BUNGALOW
+  TERRACE
+  LAND
+  SHOP
+  OFFICE
+}
+
+enum ListingStatus {
+  DRAFT
+  LIVE
+  UNDER_OFFER
+  LET
+  SOLD
+  ARCHIVED
+}
+
+enum EnquiryStatus {
+  OPEN
+  CLOSED
+}
+
+enum ViewingStatus {
+  SCHEDULED
+  DONE
+  NO_SHOW
+  CANCELLED
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum LeaseStatus {
+  ACTIVE
+  NOTICE
+  ENDED
+}
+
+enum InvoiceStatus {
+  DUE
+  PAID
+  OVERDUE
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role     @default(TENANT)
+  createdAt    DateTime @default(now())
+
+  agentProfile     AgentProfile?
+  ownerProfile     OwnerProfile?
+  listings         Listing[]         @relation("ListingAgent")
+  ownedListings    Listing[]         @relation("ListingOwner")
+  enquiries        Enquiry[]
+  viewings         Viewing[]
+  applications     Application[]
+  leasesAsTenant   Lease[]           @relation("LeaseTenant")
+  tickets          MaintenanceTicket[] @relation("TicketReporter")
+  assignedTickets  MaintenanceTicket[] @relation("TicketAssignee")
+}
+
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  city      String
+  code      String   @unique
+  createdAt DateTime @default(now())
+  agents    AgentProfile[]
+  listings  Listing[]
+}
+
+model AgentProfile {
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseNumber String
+  agencyId      String
+  agency        Agency  @relation(fields: [agencyId], references: [id])
+}
+
+model OwnerProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bank   String?
+}
+
+model Listing {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       String
+  summary     String
+  city        String
+  area        String
+  address     String
+  kind        ListingKind
+  type        PropertyType
+  status      ListingStatus @default(LIVE)
+  beds        Int           @default(0)
+  baths       Int           @default(0)
+  toilets     Int           @default(0)
+  sqm         Int?
+  priceKobo   BigInt
+  serviceKobo BigInt        @default(0)
+  furnished   Boolean       @default(false)
+  amenities   String[]
+  accent      String        @default("clay")
+  agencyId    String
+  agency      Agency        @relation(fields: [agencyId], references: [id])
+  agentId     String
+  agent       User          @relation("ListingAgent", fields: [agentId], references: [id])
+  ownerId     String?
+  owner       User?         @relation("ListingOwner", fields: [ownerId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  enquiries    Enquiry[]
+  viewings     Viewing[]
+  applications Application[]
+  leases       Lease[]
+  tickets      MaintenanceTicket[]
+}
+
+model Enquiry {
+  id        String        @id @default(cuid())
+  listingId String
+  listing   Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   String
+  status    EnquiryStatus @default(OPEN)
+  createdAt DateTime      @default(now())
+}
+
+model Viewing {
+  id        String        @id @default(cuid())
+  listingId String
+  listing   Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startsAt  DateTime
+  status    ViewingStatus @default(SCHEDULED)
+  notes     String?
+  createdAt DateTime      @default(now())
+}
+
+model Application {
+  id        String            @id @default(cuid())
+  listingId String
+  listing   Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  note      String?
+  status    ApplicationStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+}
+
+model Lease {
+  id          String      @id @default(cuid())
+  reference   String      @unique
+  listingId   String
+  listing     Listing     @relation(fields: [listingId], references: [id])
+  tenantId    String
+  tenant      User        @relation("LeaseTenant", fields: [tenantId], references: [id])
+  startDate   DateTime
+  endDate     DateTime
+  rentKobo    BigInt
+  depositKobo BigInt
+  status      LeaseStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now())
+
+  invoices Invoice[]
+  tickets  MaintenanceTicket[]
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  reference   String        @unique
+  leaseId     String
+  lease       Lease         @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  periodLabel String
+  dueDate     DateTime
+  amountKobo  BigInt
+  status      InvoiceStatus @default(DUE)
+  paidAt      DateTime?
+  paymentId   String?
+  createdAt   DateTime      @default(now())
+}
+
+model MaintenanceTicket {
+  id          String       @id @default(cuid())
+  listingId   String
+  listing     Listing      @relation(fields: [listingId], references: [id])
+  leaseId     String?
+  lease       Lease?       @relation(fields: [leaseId], references: [id])
+  reporterId  String
+  reporter    User         @relation("TicketReporter", fields: [reporterId], references: [id])
+  assigneeId  String?
+  assignee    User?        @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  title       String
+  detail      String
+  status      TicketStatus @default(OPEN)
+  createdAt   DateTime     @default(now())
+  resolvedAt  DateTime?
+}
